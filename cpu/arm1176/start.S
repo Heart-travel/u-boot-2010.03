@@ -35,7 +35,7 @@
 #ifdef CONFIG_ENABLE_MMU
 #include <asm/proc/domain.h>
 #endif
-#include <asm/arch/s3c6400.h>
+#include <asm/arch/s3c6410.h>
 
 #if !defined(CONFIG_ENABLE_MMU) && !defined(CONFIG_SYS_PHY_UBOOT_BASE)
 #define CONFIG_SYS_PHY_UBOOT_BASE	CONFIG_SYS_UBOOT_BASE
@@ -150,55 +150,53 @@ reset:
 	 * not when booting from ram!
 	 */
 cpu_init_crit:
-	/*
-	 * When booting from NAND - it has definitely been a reset, so, no need
-	 * to flush caches and disable the MMU
-	 */
-#ifndef CONFIG_NAND_SPL
-	/*
-	 * flush v4 I/D caches
-	 */
-	mov	r0, #0
-	mcr	p15, 0, r0, c7, c7, 0	/* flush v3/v4 cache */
-	mcr	p15, 0, r0, c8, c7, 0	/* flush v4 TLB */
+ /*
+  * When booting from NAND - it has definitely been a reset, so, no need
+  * to flush caches and disable the MMU
+  */
 
-	/*
-	 * disable MMU stuff and caches
-	 */
-	mrc	p15, 0, r0, c1, c0, 0
-	bic	r0, r0, #0x00002300	@ clear bits 13, 9:8 (--V- --RS)
-	bic	r0, r0, #0x00000087	@ clear bits 7, 2:0 (B--- -CAM)
-	orr	r0, r0, #0x00000002	@ set bit 2 (A) Align
-	orr	r0, r0, #0x00001000	@ set bit 12 (I) I-Cache
-	/* Prepare to disable the MMU */
-	adr	r1, mmu_disable_phys
-	/* We presume we're within the first 1024 bytes */
-	and	r1, r1, #0x3fc
-	ldr	r2, _TEXT_PHY_BASE
-	ldr	r3, =0xfff00000
-	and	r2, r2, r3
-	orr	r2, r2, r1
-	b	mmu_disable
+ /*
+  * flush v4 I/D caches
+  */
+ mov r0, #0
+ mcr p15, 0, r0, c7, c7, 0 /* flush v3/v4 cache */
+ mcr p15, 0, r0, c8, c7, 0 /* flush v4 TLB */
 
-	.align 5
-	/* Run in a single cache-line */
-mmu_disable:
-	mcr	p15, 0, r0, c1, c0, 0
-	nop
-	nop
-	mov	pc, r2
+ /*
+  * disable MMU stuff and caches
+  */
+ mrc p15, 0, r0, c1, c0, 0
+ bic r0, r0, #0x00002300 @ clear bits 13, 9:8 (--V- --RS)
+ bic r0, r0, #0x00000087 @ clear bits 7, 2:0 (B--- -CAM)
+ orr r0, r0, #0x00000002 @ set bit 2 (A) Align
+ orr r0, r0, #0x00001000 @ set bit 12 (I) I-Cache
+ mcr p15, 0, r0, c1, c0, 0
+
+ /* Peri port setup */
+ ldr r0, =0x70000000
+ orr r0, r0, #0x13
+ mcr p15,0,r0,c15,c2,4       @ 256M (0x70000000 - 0x7fffffff)
+
+ /*
+  * Go setup Memory and board specific bits prior to relocation.
+  */
+ bl lowlevel_init  /* go setup pll,mux,memory */
+
+ /* when we already run in ram, we don't need to relocate U-Boot.
+  * and actually, memory controller must be configured before U-Boot
+  * is running in ram.
+  */
+ ldr r0, =0xff000fff
+ bic r1, pc, r0  /* r0 <- current base addr of code */
+ ldr r2, _TEXT_BASE  /* r1 <- original base addr in ram */
+ bic r2, r2, r0  /* r0 <- current base addr of code */
+ cmp     r1, r2                  /* compare r0, r1                  */
+ beq     after_copy  /* r0 == r1 then skip flash copy   */
+
+#ifdef CONFIG_BOOT_NAND
+ mov r0, #0x1000
+ bl copy_from_nand
 #endif
-
-mmu_disable_phys:
-	/* Peri port setup */
-	ldr	r0, =0x70000000
-	orr	r0, r0, #0x13
-	mcr	p15,0,r0,c15,c2,4       @ 256M (0x70000000 - 0x7fffffff)
-
-	/*
-	 * Go setup Memory and board specific bits prior to relocation.
-	 */
-	bl	lowlevel_init		/* go setup pll,mux,memory */
 
 after_copy:
 #ifdef CONFIG_ENABLE_MMU
@@ -215,64 +213,95 @@ enable_mmu:
 	orr	r1, r0, r1
 	mcr	p15, 0, r1, c2, c0, 0
 
-	/* Enable the MMU */
-	mrc	p15, 0, r0, c1, c0, 0
-	orr	r0, r0, #1		/* Set CR_M to enable MMU */
+ /* Enable the MMU */
+mmu_on:
+ mrc p15, 0, r0, c1, c0, 0
+ orr r0, r0, #1  /* Set CR_M to enable MMU */
 
-	/* Prepare to enable the MMU */
-	adr	r1, skip_hw_init
-	and	r1, r1, #0x3fc
-	ldr	r2, _TEXT_BASE
-	ldr	r3, =0xfff00000
-	and	r2, r2, r3
-	orr	r2, r2, r1
-	b	mmu_enable
-
-	.align 5
-	/* Run in a single cache-line */
-mmu_enable:
-
-	mcr	p15, 0, r0, c1, c0, 0
-	nop
-	nop
-	mov	pc, r2
+ mcr p15, 0, r0, c1, c0, 0
+ nop
+ nop
+ nop
+ nop
 #endif
 
 skip_hw_init:
-	/* Set up the stack						    */
+ /* Set up the stack          */
 stack_setup:
-	ldr	r0, =CONFIG_SYS_UBOOT_BASE	/* base of copy in DRAM	    */
-	sub	r0, r0, #CONFIG_SYS_MALLOC_LEN	/* malloc area                      */
-	sub	r0, r0, #CONFIG_SYS_GBL_DATA_SIZE /* bdinfo                        */
-	sub	sp, r0, #12		/* leave 3 words for abort-stack    */
+#ifdef CONFIG_MEMORY_UPPER_CODE
+ ldr sp, =(CONFIG_SYS_UBOOT_BASE +  CONFIG_SYS_UBOOT_SIZE - 0xc)
+#else
+ ldr r0, _TEXT_BASE  /* upper 128 KiB: relocated uboot   */
+ sub r0, r0, #CONFIG_SYS_MALLOC_LEN /* malloc area                      */
+ sub r0, r0, #CONFIG_SYS_GBL_DATA_SIZE/* bdinfo                        */
+#ifdef CONFIG_USE_IRQ
+ sub r0, r0, #(CONFIG_STACKSIZE_IRQ+CONFIG_STACKSIZE_FIQ)
+#endif
+ sub sp, r0, #12  /* leave 3 words for abort-stack    */
+#endif
 
 clear_bss:
-	ldr	r0, _bss_start		/* find start of bss segment        */
-	ldr	r1, _bss_end		/* stop here                        */
-	mov 	r2, #0			/* clear                            */
+ ldr r0, _bss_start  /* find start of bss segment        */
+ ldr r1, _bss_end  /* stop here                        */
+ mov  r2, #0   /* clear                            */
 
 clbss_l:
-	str	r2, [r0]		/* clear loop...                    */
-	add	r0, r0, #4
-	cmp	r0, r1
-	ble	clbss_l
+ str r2, [r0]  /* clear loop...                    */
+ add r0, r0, #4
+ cmp r0, r1
+ ble clbss_l
 
-#ifndef CONFIG_NAND_SPL
-	ldr	pc, _start_armboot
+ ldr pc, _start_armboot
 
 _start_armboot:
-	.word start_armboot
-#else
-	b	nand_boot
-/*	.word nand_boot*/
-#endif
+ .word start_armboot
 
 #ifdef CONFIG_ENABLE_MMU
 _mmu_table_base:
-	.word mmu_table
+ .word mmu_table
 #endif
 
-#ifndef CONFIG_NAND_SPL
+/*
+ * copy U-Boot to SDRAM and jump to ram (from NAND or OneNAND)
+ * r0: size to be compared
+ * Load 1'st 2blocks to RAM because U-boot's size is larger than 1block(128k) size
+ */
+ .globl copy_from_nand
+copy_from_nand:
+ mov r10, lr  /* save return address */
+
+ mov r9, r0
+ /* get ready to call C functions */
+ ldr sp, _TEXT_PHY_BASE /* setup temp stack pointer */
+ sub sp, sp, #12
+ mov fp, #0   /* no previous frame, so fp=0 */
+ mov r9, #0x1000
+ bl copy_uboot_to_ram           //¡ä?o¡¥¨ºyD¨¨¨°a¨¬¨ª?¨®¡ê?¨¦?o¨®?¦Ì?¡Â?¡ê
+
+3: tst  r0, #0x0
+ bne copy_failed
+
+ ldr r0, =0x0c000000
+ ldr r1, _TEXT_PHY_BASE
+1: ldr r3, [r0], #4
+ ldr r4, [r1], #4
+ teq r3, r4
+ bne compare_failed /* not matched */
+ subs r9, r9, #4
+ bne 1b
+
+4: mov lr, r10  /* all is OK */
+ mov pc, lr
+
+copy_failed:
+ nop   /* copy from nand failed */
+ b copy_failed
+
+compare_failed:
+ nop   /* compare failed */
+ b compare_failed
+
+
 /*
  * we assume that cache operation is done before. (eg. cleanup_before_linux())
  * actually, we don't need to do anything about cache if not use d-cache in
@@ -360,13 +389,33 @@ phy_last_jump:
 	/* grab pointer to old stack */
 	add	r0, sp, #S_FRAME_SIZE
 
-	add	r5, sp, #S_SP
-	mov	r1, lr
-	/* save sp_SVC, lr_SVC, pc, cpsr */
-	stmia	r5, {r0 - r3}
-	/* save current stack into r0 (param register) */
-	mov	r0, sp
-	.endm
+ add r5, sp, #S_SP
+ mov r1, lr
+ /* save sp_SVC, lr_SVC, pc, cpsr */
+ stmia r5, {r0 - r3}
+ /* save current stack into r0 (param register) */
+ mov r0, sp    @ save current stack into r0 (param register)
+ .endm
+
+ .macro irq_save_user_regs
+ sub sp, sp, #S_FRAME_SIZE
+ stmia sp, {r0 - r12}   @ Calling r0-r12
+ add r8, sp, #S_PC   @ !!!! R8 NEEDS to be saved !!!! a reserved stack spot would be good.
+ stmdb r8, {sp, lr}^   @ Calling SP, LR
+ str lr, [r8, #0]   @ Save calling PC
+ mrs r6, spsr
+ str r6, [r8, #4]   @ Save CPSR
+ str r0, [r8, #8]   @ Save OLD_R0
+ mov r0, sp
+ .endm
+
+ .macro irq_restore_user_regs
+ ldmia sp, {r0 - lr}^   @ Calling r0 - lr
+ mov r0, r0
+ ldr lr, [sp, #S_PC]   @ Get PC
+ add sp, sp, #S_FRAME_SIZE
+ subs pc, lr, #4   @ return & move spsr_svc into cpsr
+ .endm
 
 	.macro get_bad_stack
 	/* setup our mode stack (enter in banked mode) */
@@ -446,9 +495,27 @@ data_abort:
 
 	.align	5
 not_used:
-	get_bad_stack
-	bad_save_user_regs
-	bl	do_not_used
+ get_bad_stack
+ bad_save_user_regs
+ bl do_not_used
+#ifdef CONFIG_USE_IRQ
+
+ .align 5
+irq:
+ get_irq_stack
+ irq_save_user_regs
+ bl do_irq
+ irq_restore_user_regs
+
+ .align 5
+fiq:
+ get_fiq_stack
+ /* someone ought to write a more effiction fiq_save_user_regs */
+ irq_save_user_regs
+ bl do_fiq
+ irq_restore_user_regs
+
+#else
 
 	.align	5
 irq:
