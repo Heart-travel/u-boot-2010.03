@@ -1,0 +1,1 @@
+/home/zcgsa/u-boot/u-boot-2010.03/board/samsung/smdk6410/lowlevel_init.S
