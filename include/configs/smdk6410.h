@@ -78,10 +78,27 @@
 /*
  * Hardware drivers
  */
-#define CONFIG_NET_MULTI
-#define CONFIG_CS8900			/* we have a CS8900 on-board	*/
-#define CONFIG_CS8900_BASE	  	0x18800300
-#define CONFIG_CS8900_BUS16		/* follow the Linux driver	*/
+//#define CONFIG_NET_MULTI
+//#define CONFIG_CS8900			/* we have a CS8900 on-board	*/
+//#define CONFIG_CS8900_BASE	  	0x18800300
+//#define CONFIG_CS8900_BUS16		/* follow the Linux driver	*/
+
+/* configure DM9000 */
+#define CONFIG_NET_MULTI 			1
+#define CONFIG_DM9000_NO_SROM 		1
+#define CONFIG_dm9000
+#define CONFIG_DRIVER_DM9000 		1
+#define CONFIG_DM9000_BASE 			0x18800300
+#define DM9000_IO 					CONFIG_DM9000_BASE
+#define DM9000_DATA 				(CONFIG_DM9000_BASE+4)
+#define CONFIG_DM9000_USE_16BIT
+#define CONFIG_ETHADDR 				00:40:5c:26:0a:5b
+#define CONFIG_NETMASK 				255.255.255.0
+#define CONFIG_IPADDR 				192.168.1.6
+#define CONFIG_SERVERIP 			192.168.1.101
+#define CONFIG_GATEWAYIP 			192.168.1.1
+//#define CONFIG_DM9000_DEBUG
+
 
 /*
  * select serial console configuration

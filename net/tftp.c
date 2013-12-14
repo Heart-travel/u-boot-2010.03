@@ -526,7 +526,7 @@ void
 TftpStart (void)
 {
 	char *ep;             /* Environment pointer */
-
+#if 0
 	/*
 	 * Allow the user to choose TFTP blocksize and timeout.
 	 * TFTP protocol has a minimal timeout of 1 second.
@@ -546,6 +546,7 @@ TftpStart (void)
 
 	debug("TFTP blocksize = %i, timeout = %ld ms\n",
 		TftpBlkSizeOption, TftpTimeoutMSecs);
+#endif
 
 	TftpServerIP = NetServerIP;
 	if (BootFile[0] == '\0') {
