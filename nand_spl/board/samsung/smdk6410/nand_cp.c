@@ -1,1 +1,0 @@
-/home/zcgsa/u-boot/u-boot-2010.03/cpu/arm1176/nand_cp.c
