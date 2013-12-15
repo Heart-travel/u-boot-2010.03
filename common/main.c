@@ -269,6 +269,25 @@ static __inline__ int abortboot(int bootdelay)
 # endif	/* CONFIG_AUTOBOOT_KEYED */
 #endif	/* CONFIG_BOOTDELAY >= 0  */
 
+void cust_menu(void)
+{
+	unsigned char c;	
+	printf("##### ZCG6410 BOOTLOADER #####\n");
+	printf("Customized menu:\n");
+	
+	do{
+		c = getc();
+				
+		if (c == 'y' ||  c == 'Y')
+			printf("You choose yes!\n");
+		else 
+			printf("c = %c\n", c);
+		
+	}while(c != 'q' && c != 'Q');
+	
+}
+
+
 /****************************************************************************/
 
 void main_loop (void)
@@ -440,7 +459,8 @@ void main_loop (void)
 	 * Main Loop for Monitor Command Processing
 	 */
 #ifdef CONFIG_SYS_HUSH_PARSER
-	parse_file_outer();
+	cust_menu();
+	parse_file_outer();	
 	/* This point is never reached */
 	for (;;);
 #else
